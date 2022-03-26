@@ -4,19 +4,24 @@ class Worker:
         self.__id = 'worker-' + str(uuid.uuid1())        
         self.__cap = capability
         self.assigned = False
-        self.__graph = [ ]
+        self.__graph = []
         
     @property
-    def required_resource(self):
+    def capability(self):
         return self.__cap
-        
-    #@property
-    #def assigned(self):
-    #    return self.__assigned
+    
+    @property
+    def id(self):
+        return self.__id
+    
+    @property
+    def graph(self):
+        return self.__graph
         
     def assign(self, graph):
         self.assigned = True
         self.__graph = graph
     
-    
-        
+    def deassign(self):
+        self.assigned = False
+        self.__graph = []

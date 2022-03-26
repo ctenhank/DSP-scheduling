@@ -1,4 +1,4 @@
-from component.vertex import Vertex
+from dsp_simulation.topology.vertex import Vertex
 import random as rd
 
 def global_grouping(source:Vertex, target: Vertex):

@@ -1,6 +1,4 @@
 import time
-import uuid
-
 from numpy import Inf
 
 class Task:

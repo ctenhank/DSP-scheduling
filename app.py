@@ -1,10 +1,11 @@
 #from metrics.latency_generator import LatencyGenerator, SomeAwesomeSimulator
 
-from component.cluster import Cluster
-from component.topology import Topology
-from component.vertex import Vertex
-from scheduler.rr_scheduler import RoundRobinScheduler
-from component.grouping import *
+from dsp_simulation.cluster.cluster import Cluster
+from dsp_simulation.topology.topology import Topology
+from dsp_simulation.topology.vertex import Vertex
+from dsp_simulation.scheduler.rr_scheduler import RoundRobinScheduler
+from dsp_simulation.topology.grouping import *
+
 import argparse
 
 def initialize_environment():
@@ -32,7 +33,7 @@ def wordcount_main():
     edges.extend(edge_src2st)
     edges.extend(edge_st2cnt)
     
-    #print(cluster)
+    print(cluster)
     
     topology = Topology(
         name=args.tp_name,
@@ -50,8 +51,8 @@ if __name__ == '__main__':
     parser.add_argument('--simulate-star', action='store_true')
     parser.add_argument('--simulate-dfas', action='store_true')
     parser.add_argument('--cluster-max-node', type=int, default=50)
-    parser.add_argument('--cluster-max-rack', type=int, default=5)
-    parser.add_argument('--cluster-max-worker', type=int, default=5)
+    parser.add_argument('--cluster-max-rack', type=int, default=8)
+    parser.add_argument('--cluster-max-worker', type=int, default=10)
     parser.add_argument('--tp-name', type=str, default='topology')
     parser.add_argument('--wc-src-res', type=int, default=24)
     parser.add_argument('--wc-st-res', type=int, default=16)

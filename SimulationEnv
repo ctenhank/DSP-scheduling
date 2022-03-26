@@ -1,3 +1,0 @@
-public Cluster generateRandomCluster(int maxSupervisors, int maxPortsPerSupervisor, int maxRacks, double maxCpu, double maxMem) {
-Cluster cluster = new GenRandomCluster(this.defaultConfs).generateRandomCluster(6, 2, 3, 1000.0 * 8, 10000.0 * 8);
-this.defaultConfs.put(Config.TOPOLOGY_WORKER_MAX_HEAP_SIZE_MB, PerformanceUtils.getRandomIntInRange(0, 10000 * 8, random));

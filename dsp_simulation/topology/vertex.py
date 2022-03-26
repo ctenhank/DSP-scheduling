@@ -2,7 +2,7 @@ import uuid
 from typing import List
 import random as rd
 
-from component.task import Task
+from dsp_simulation.topology.task import Task
 
 
 class Vertex:

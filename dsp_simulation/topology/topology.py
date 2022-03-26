@@ -2,9 +2,8 @@ from collections import deque
 from typing import List, Tuple
 import uuid
 import random as rd
-from component.task import Task
-
-from component.vertex import Vertex
+from dsp_simulation.topology.task import Task
+from dsp_simulation.topology.vertex import Vertex
     
 class Topology:
     """Acyclic graph consisting of logical operators
