@@ -1,6 +1,7 @@
 import random as rd
-from typing import List
+from typing import List, Tuple
 from dsp_simulation.cluster.physical_node import PhysicalNode
+from dsp_simulation.topology.subtopology import SubTopology
 from dsp_simulation.topology.topology import Topology
 
 class Cluster:
@@ -41,6 +42,7 @@ class Cluster:
 
         self.__racks= []
         self.__nodes: List[PhysicalNode] = []
+        self.__topologies: List[Topology] = []
 
         if random:
             self.__nodes = self._generate_random_nodes(max_node, max_worker)
@@ -63,6 +65,18 @@ class Cluster:
         ret += '-'*50 + '\n'
         ret += '='*50 + '\n'
         return ret
+    
+    @property
+    def racks(self):
+        return self.__racks
+    
+    @property
+    def nodes(self):
+        return self.__nodes
+    
+    @property
+    def topologies(self):
+        return self.__topologies
 
     def _generate_sample_cluster(self, config):
         pass
@@ -108,6 +122,8 @@ class Cluster:
         return nodes
     
     def _assign_rack_to_nodes(self):
+        """Assign randomly rack type to nodes
+        """
         for node in self.__nodes:
             rack = rd.choice(self.__racks)
             node.rack = rack
@@ -128,6 +144,14 @@ class Cluster:
         return ret
     
     def check_topology_can_be_allocated(self, topology: Topology):
+        """Check whether the given topology can be allocated in this cluster
+
+        Args:
+            topology (Topology): The topology to execute
+
+        Returns:
+            bool: 
+        """
         available_nodes = self.get_available_physical_node()
         workers = []
         for node in available_nodes:
@@ -135,4 +159,12 @@ class Cluster:
             
         if len(workers) >= len(topology.subgraph):
             return True
+        
+        print('There are no enough resource and workers to run the topology in this cluster.')
         return False
+    
+    def assign_topology(self, topology: Topology, assignment: List[PhysicalNode]):
+        self.__topologies.append(topology)
+        
+        for idx, node in enumerate(assignment):
+            node.assign(topology.subgraph[idx])

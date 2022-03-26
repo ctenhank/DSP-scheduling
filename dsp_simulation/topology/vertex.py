@@ -2,6 +2,9 @@ import uuid
 from typing import List
 import random as rd
 
+import numpy
+from dsp_simulation.simulator.latency_generator import GaussianLatencyGenerator
+
 from dsp_simulation.topology.task import Task
 
 
@@ -19,7 +22,6 @@ class Vertex:
         self.__cap = capability
 
         # physical node의 리소스와 현재 태스크를 수행하기 위해 필요한 컴퓨팅 리소스를 비교해서 latency simulator를 실행시킴
-        self.__latency_simulator = self._set_latency_simulator()
         self.__tasks: List[Task] = self._mk_task()
 
     def __str__(self):
@@ -53,15 +55,16 @@ class Vertex:
     def capability(self):
         return self.__cap
 
-    def _set_latency_simulator(self):
-        self.__latency_simulator = None
-        pass
-
     def _mk_task(self):
         tasks = []
         cnt = 0
         for _ in range(self.__parallelism):
-            tasks.append(Task(self.__latency_simulator,
-                         name=self.__id+ '-'+str(cnt)))
+            tasks.append(
+                Task(
+                    required_cap=self.__cap,
+                    model=GaussianLatencyGenerator(jitter_model=numpy.random.standard_normal),
+                    name=self.__id + '-'+str(cnt)
+                )
+            )
             cnt += 1
         return tasks

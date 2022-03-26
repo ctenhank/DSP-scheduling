@@ -2,6 +2,7 @@ from collections import deque
 from typing import List, Tuple
 import uuid
 import random as rd
+from dsp_simulation.topology.subtopology import SubTopology
 from dsp_simulation.topology.task import Task
 from dsp_simulation.topology.vertex import Vertex
     
@@ -19,15 +20,7 @@ class Topology:
             
         self.__vertex = vertex
         self.__edge = edge
-        #print(f'vertex\n')
-        #for v in vertex:
-        #    print(f'{v}\n')
-            
-        #print(f'Edges:')
-        #for e in edge:
-        #    print(f'  {e[0].id} -> {e[1].id}')
-        #print('\n')
-        self.__subgraph = self.__partitioning()
+        self.__subgraph: List[SubTopology] = self.__partitioning()
             
     @property
     def id(self):
@@ -37,15 +30,6 @@ class Topology:
     def subgraph(self):
         return self.__subgraph
     
-    def print_subgraph(self):
-        print('-'*50)
-        for idx, subgraph in enumerate(self.__subgraph):
-            str_ = f'subgraph-{idx}: {len(subgraph)}, vertex: '
-            for task in subgraph:
-                str_ += str(task.id) + ' '
-            print(str_)
-        print('-'*50)
-            
     def __str__(self):
         ret = '=' * 25 + 'Topology Info' + '='* 25 + '\n'
         ret += 'Vertex Info: id, capability, type, parallelism\n'
@@ -54,9 +38,6 @@ class Topology:
         ret += f'Edge from vertex to vertex:\n {self.__edge}\n'
         ret += '=' * 50 + '\n'
         return ret
-    
-    def __dfs(self, task: Task):
-        pass
             
     def __partitioning(self):
         ret = []
@@ -92,5 +73,5 @@ class Topology:
                                 queue.append(task2)
                                 subgraph_tasks.append(task2)
                         
-                ret.append(set(subgraph_tasks))
+                ret.append(SubTopology(list(set(subgraph_tasks)), self.__id))
         return ret

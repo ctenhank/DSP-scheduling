@@ -1,6 +1,8 @@
 #from metrics.latency_generator import LatencyGenerator, SomeAwesomeSimulator
 
 from dsp_simulation.cluster.cluster import Cluster
+from dsp_simulation.scheduler.ga_scheduler import GAScheduler
+from dsp_simulation.simulator.simulator import Simulator
 from dsp_simulation.topology.topology import Topology
 from dsp_simulation.topology.vertex import Vertex
 from dsp_simulation.scheduler.rr_scheduler import RoundRobinScheduler
@@ -8,32 +10,22 @@ from dsp_simulation.topology.grouping import *
 
 import argparse
 
-def initialize_environment():
-    pass
-
-def create_topology():
-    pass
-
-def scheduling():
-    pass
-
-def start_simulation():
-    pass
-
 def wordcount_main():
     global args
+    
     cluster = Cluster(random=True, max_node=args.cluster_max_node, max_rack=args.cluster_max_rack, max_worker=args.cluster_max_worker)
+    print(cluster)
+    
     source = Vertex(args.wc_src_res, args.wc_src_hint, Vertex.TYPE[0], 'source')
     split = Vertex(args.wc_st_res, args.wc_st_hint, Vertex.TYPE[1], "split")
     count = Vertex(args.wc_cnt_res, args.wc_cnt_hint, Vertex.TYPE[1], "count")
-    #print(count)
+    
     edge_src2st = shuffle_grouping(source, split)
     edge_st2cnt = shuffle_grouping(split, count)
+    
     edges = []
     edges.extend(edge_src2st)
     edges.extend(edge_st2cnt)
-    
-    print(cluster)
     
     topology = Topology(
         name=args.tp_name,
@@ -41,9 +33,14 @@ def wordcount_main():
         edge=edges
         )
     #print(topology)
-    scheduler = RoundRobinScheduler()
-    scheduler.schedule(topology, cluster)    
+    
+    #scheduler = RoundRobinScheduler()
+    scheduler = GAScheduler(topology, cluster)
+    scheduler.schedule(topology, cluster)
+
     # start simulation
+    #simulator = Simulator(cluster)
+    #simulator.start_benchmark()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
