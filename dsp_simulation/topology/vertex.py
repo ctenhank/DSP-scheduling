@@ -1,70 +1,108 @@
+from abc import abstractmethod
+from asyncio import Task
 import uuid
 from typing import List
-import random as rd
 
-import numpy
-from dsp_simulation.simulator.latency_generator import GaussianLatencyGenerator
-
-from dsp_simulation.topology.task import Task
-
-
-class Vertex:
-    TYPE = ['source', 'operator']
-
-    def __init__(self, capability=10, parallelism=3, type=None, name=None):
+class Vertex:       
+    def __init__(self, name=None):
         if name is None:
-            self.__id = 'vertex-' + str(uuid.uuid1())
+            self._id = 'vertex-' + str(uuid.uuid1())
         else:
-            self.__id = name
-
-        self.__type = type
-        self.__parallelism = parallelism
-        self.__cap = capability
-
-        # physical node의 리소스와 현재 태스크를 수행하기 위해 필요한 컴퓨팅 리소스를 비교해서 latency simulator를 실행시킴
-        self.__tasks: List[Task] = self._mk_task()
+            self._id = name
+      
+        self._outdegree: List[Vertex] = []
+        self._parallelism = 1
 
     def __str__(self):
-        ret = '-' * 50 + '\n'
-        #ret += 'Vertex Info: id, capability, type\n'
-        ret += f'Vertex: {self.__id}, {self.__cap}, {self.__type}, {self.__parallelism}\n'
-        ret += '-' * 50 + '\n'
-        ret += '  Task Info: id, latency_generator, iterations\n'
-        for task in self.__tasks:
-            ret += str(task) + '\n'
-        ret += '-' * 50
-        return ret
+        return f'Vertex: {self._id}, {self.type}, {self._parallelism}'
+    
+    @property
+    @abstractmethod
+    def type(self):
+        pass        
 
     @property
     def id(self):
-        return self.__id
+        return self._id
 
     @property
-    def type(self):
-        return self.__type
+    def outdegree(self):
+        return self._outdegree
+    
+    def add_outdegree(self, target):
+        self._outdegree.append(target)
 
+    
+class SourceVertex(Vertex):
+    """SourceVertex has conceptually no indegree.
+
+    Args:
+        Vertex (_type_): _description_
+    """
+    def __init__(self, data_rate=10000, name=None):
+        super().__init__(name)
+        self._data_rate = data_rate
+        self._data_size = 0
+    
+    @property
+    def data_rate(self):
+        return self._data_rate
+    
+    def type(self):
+        return SourceVertex.__class__
+
+
+class SinkVertex(Vertex):
+    """SourceVertex has conceptually no outdegree.
+
+    Args:
+        Vertex (_type_): _description_
+    """
+    def __init__(self, name=None):
+        super().__init__(name)
+        self._indegree: List[Vertex] = []
+    
+    @property
+    def indegree(self):
+        return self._indegree
+    
+    def type(self):
+        return SinkVertex.__class__
+    
+    def add_indegree(self, target):
+        self._indegree.append(target)
+
+    
+class OperatorVertex(Vertex):
+    """If there are over 2 degrees, this OperatorVertex should be blocked up to coming from every its source.
+    
+    """        
+    def __init__(self, parallelism=3, selectivity=5, productivity=0.2, name=None):
+        super().__init__(name)
+        self._parallelism = parallelism
+        self._indegree: List[Vertex] = []
+        self._selectivity = selectivity
+        self._productivity = productivity
+  
+    
     @property
     def parallelism(self):
-        return self.__parallelism
-
+        return self._parallelism
+        
     @property
-    def tasks(self):
-        return self.__tasks
-
+    def indegree(self):
+        return self._indegree
+    
     @property
-    def capability(self):
-        return self.__cap
-
-    def _mk_task(self):
-        tasks = []
-        cnt = 0
-        for _ in range(self.__parallelism):
-            tasks.append(
-                Task(
-                    required_cap=self.__cap,
-                    model=GaussianLatencyGenerator(jitter_model=numpy.random.standard_normal),
-                    name=self.__id + '-'+str(cnt)
-                )
-            )
-            cnt += 1
-        return tasks
+    def selectivity(self):
+        return self._selectivity
+    
+    @property
+    def productivity(self):
+        return self._productivity
+    
+    def type(self):
+        return OperatorVertex.__class__
+    
+    def add_indegree(self, target):
+        self._indegree.append(target)

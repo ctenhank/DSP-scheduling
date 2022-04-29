@@ -9,5 +9,8 @@ class GWOScheduler(Scheduler):
     Args:
         Scheduler (_type_): _description_
     """
-    def schedule(self, topology: Topology, cluster: Cluster) -> bool:
+    def __init__(self):
+        super().__init__(__class__.__name__)
+        
+    def schedule(self, cluster: Cluster, topology: Topology) -> bool:
         pass

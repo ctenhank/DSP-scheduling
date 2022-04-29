@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import numpy as np
 
 class LatencyGenerator:
     """This class generates latency in the given latency_model, the default is gaussian noise model.
@@ -40,16 +41,15 @@ class LatencyGenerator:
         pass
     
 class GaussianLatencyGenerator(LatencyGenerator):
-    def __init__(self, jitter_model, mean=None, std=None) -> None:
+    def __init__(self, mean=0.7190926125335194, std=0.1) -> None:
         """Late
 
         Args:
-            latency_model (_type_): _description_
             mean (_type_): _description_
             std (_type_): _description_
         """
-        super().__init__(jitter_model, mean, std)
-        self._jitter_model = jitter_model
+        super().__init__(None, mean, std)
+        self._jitter_model = np.random.normal
         self._mean = mean
         self._std = std
         
@@ -57,4 +57,5 @@ class GaussianLatencyGenerator(LatencyGenerator):
         return self._jitter_model()
     
     def next_latency_ms(self):
-        return (self._get_noise() * self._std + self._mean) / 1000
+        #return abs(self._get_noise() * self._std + self._mean)
+        return abs(np.random.normal(self._mean, self._std))

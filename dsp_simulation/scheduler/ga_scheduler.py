@@ -1,8 +1,10 @@
 from datetime import datetime
+from pathlib import Path
 from typing import List
 from copy import deepcopy
 from dsp_simulation.cluster.cluster import Cluster
 from dsp_simulation.cluster.physical_node import PhysicalNode
+from dsp_simulation.scheduler.objective import Objective
 #from dsp_simulation.scheduler.metahueristic.fitness import Fitness
 from dsp_simulation.scheduler.scheduler import MetaHueristicScheduler
 from dsp_simulation.topology.topology import Topology
@@ -11,10 +13,6 @@ import sys
 import random as rd
 import time
 #from dsp_simulation.scheduler.ga_scheduler import Individual
-
-
-
-
 
 class Individual:
     def __init__(self, topology: Topology, cluster: Cluster):
@@ -25,6 +23,12 @@ class Individual:
     #@property
     #def assignment(self):
     #    return self._assignment
+    
+    def _select_randomly_node(self, nodes, node_info):
+        node = rd.choice(nodes)
+        while node_info[node.id] <= 0:
+            node = rd.choice(nodes)
+        return node
         
     def _initialize_individual(self) -> List[PhysicalNode]:
         """Select randomly the nodes of cluster to allocate the topology
@@ -36,72 +40,24 @@ class Individual:
         
         available_nodes = self._cluster.get_available_physical_node()
         
-        len_subgraph = len(self._topology.subgraph)
-        #print(len_subgraph)
         ret = []
         node_info = {}
         for node in available_nodes:
             node_info[node.id] = node.available_worker_cnt
         
-            #print(f'{node.id}: {node_info[node.id]}')
-        #node_info[node.id] = node.available_worker_cnt
-        
-        # 여기서 막힘
-        cnt = 0
+        len_subgraph = len(self._topology.taskgraph.subgraph)
         for _ in range(len_subgraph):
-            cnt +=1
-            node = rd.choice(available_nodes)
-            # 정확하게는 여기서 블럭됨
-            while node_info[node.id] <= 0:
-                node = rd.choice(available_nodes)
-                #print(node.id)
-                
+            node = self._select_randomly_node(available_nodes, node_info)
             node_info[node.id] -= 1
             ret.append(node)
-        for node in ret:
-            node_info[node.id] = node.available_worker_cnt
-            #print(f'{node.id}: {node_info[node.id]}, {node.available_worker_cnt}')
+        #print(ret)
         return ret
         
     def offstring_update(self):
         pass
 
 
-class Network:
-    INTER_THREAD = 1
-    INTER_PROCESS = 4
-    INTER_NODE = 9
-    INTER_RACK = 16
 
-
-class Fitness:
-    @classmethod
-    def fitness_weighted_sum(cls, assignment: List[PhysicalNode], weight_network=1):
-        return weight_network * Fitness.topology_network_distance(assignment)
-    
-    @classmethod
-    def resource_balanced(cls):
-        pass
-    
-    @classmethod
-    def topology_network_distance(cls, assignment: List[PhysicalNode]):
-        network_dist = 0
-        
-        #assignment = ind.assignment
-        len_assignment = len(assignment)
-        for i in range(len_assignment):
-            for j in range(i+1, len_assignment):
-                if assignment[i].id == assignment[j].id:
-                    network_dist += 4
-                    #network_dist += Network.INTER_PROCESS
-                elif assignment[i].rack != assignment[j].rack:
-                    network_dist += 16
-                    #network_dist += Network.INTER_RACK   
-                else:
-                    network_dist += 9
-                    #network_dist += Network.INTER_NODE
-                        
-        return network_dist
 
 class GAScheduler(MetaHueristicScheduler):   
     """Genetic Algorithm algorithm-based Scheduler
@@ -109,7 +65,7 @@ class GAScheduler(MetaHueristicScheduler):
     Args:
         Scheduler (_type_): _description_
     """
-    def __init__(self, topology: Topology, cluster: Cluster, num_iter=100, num_pop=300, num_cross=100, num_mut=50):
+    def __init__(self, num_iter=100, num_pop=300, num_cross=100, num_mut=50):
         """_summary_
 
         Args:
@@ -119,14 +75,13 @@ class GAScheduler(MetaHueristicScheduler):
             num_pop (int, optional): The number of individuals in population. Defaults to 1000.
             num_cross (int, optional): The number of crossover. Defaults to 100.
         """
-        super().__init__(num_iter)
+        super().__init__(__class__.__name__)
+        self._num_iteration = num_iter
         self._num_generation = 0
         self._num_population = num_pop
         self._num_crossover = num_cross
         self._num_mutation = num_mut
         self._best_so_far = sys.maxsize
-        # Sometimes the running is blocked at here
-        #self._population = [ Individual(topology, cluster) for _ in range(num_pop)]
         
     def _tourmament_selection(self, scores, k=5):
         parents = []
@@ -141,44 +96,69 @@ class GAScheduler(MetaHueristicScheduler):
         
         pair.sort(key=lambda t: t[1])
         return pair[0][0], pair[1][0]
-
-
-    def _meta_algorithm(self, topology: Topology, cluster: Cluster) -> List[PhysicalNode]:
-        best = -1
+    
+    
+    def _check_available_case(self, cluster: Cluster, assignment: List[PhysicalNode]):
+        # required worker number
+        info = {}
+        avail_info = {}
+        for node in assignment:
+            if node.id not in info:
+                info[node.id] = 0
+            info[node.id] += 1
+            
+        for node in cluster.nodes:
+            if node.id in info:
+                #if node not in avail_info:
+                    #avail_info[node] = node.available_worker_cnt
+                if node.available_worker_cnt < info[node.id]:
+                    return False
+        return True
+                
+    
+    # Can I impove the time?
+    def _meta_algorithm(self, cluster: Cluster, topology: Topology) -> List[PhysicalNode]:
+        best_idx = -1
         num_top = int(self._num_population * 0.9)
         total_time_fitness = 0.0
         total_time_crossover = 0.0
         total_time_mutation = 0.0
         total_time_sorting = 0.0
-        t = datetime.now()
-        file = open(f'logs/elapsed-time-{t}.log', 'w')
-        file2 = open(f'logs/performance-{t}.log', 'w')
+        ga_st = datetime.now()
+        outdir = Path('logs/ga')
+        outdir.mkdir(exist_ok=True, parents=True)
+        file = open(f'{str(outdir)}/elapsed-time-{ga_st}.log', 'w')
+        file2 = open(f'{str(outdir)}/performance-{ga_st}.log', 'w')
         print(f'num_pop,nim_cross,num_mut: {self._num_population},{self._num_crossover},{self._num_mutation}', file=file)
-        
-        if not self.canSchedule(topology, cluster):
-            return None
 
-        population = [ Individual(topology, cluster) for _ in range(self._num_population)]
+        #population = [ Individual(topology, cluster) for _ in range(self._num_population)]
+        population = []
+        while len(population) < 300:
+            ind = Individual(topology, cluster)
+            if self._check_available_case(cluster, ind.assignment):
+                population.append(ind)
         
         while self._num_iteration >= self._num_generation:      
             scores = []
             d_scores = {}
             stime = time.time()
             for i in range(self._num_population):
-                score = Fitness.fitness_weighted_sum(population[i].assignment)
+                score = Objective.objectvie_weighted_sum(population[i].assignment)
                 scores.append(score)
                 d_scores[i] = score
+                #print(score)
                 
                 # 
                 if self._best_so_far > score:
                     #print(f'Generation {self._num_generation}: {self._best_so_far}')
                     self._best_so_far = score
-                    best = i
+                    best_idx = i
                 
             print(f'Generation {self._num_generation}: {self._best_so_far}', file=file2, flush=True)
+            #print(f'Generation {self._num_generation}: {self._best_so_far}')
             
             time_fitness = time.time() - stime
-            total_time_crossover += time_fitness
+            total_time_fitness += time_fitness
             
             # Crossover
             stime = time.time()
@@ -188,13 +168,19 @@ class GAScheduler(MetaHueristicScheduler):
                 child= deepcopy(parent1)
                 
                 pivot = rd.randint(0, min(len(parent1.assignment), len(parent2.assignment)) - 1)
+                # check here
                 child.assignment = parent1.assignment[:pivot] + parent2.assignment[pivot:]
+                if len(topology.taskgraph.subgraph) != len(child.assignment):
+                    continue
+                
+                if not self._check_available_case(cluster, child.assignment):
+                    continue
                 
                 if child not in population:
                     #score_child = Fitness.fitness_weighted_sum(child)
                     population.append(child)
                     #scores.append(score_child)
-                    d_scores[len(population) - 1] = Fitness.fitness_weighted_sum(child.assignment)
+                    d_scores[len(population) - 1] = Objective.objectvie_weighted_sum(child.assignment)
             time_crossover = time.time() - stime
             total_time_crossover += time_crossover
             
@@ -206,19 +192,35 @@ class GAScheduler(MetaHueristicScheduler):
                 mutant = deepcopy(population[idx])
                 
                 # Swap
-                idx1, idx2 = rd.choices([i for i in range(len(mutant.assignment))], k=2)
-                temp = mutant.assignment[idx1]
-                mutant.assignment[idx1] = mutant.assignment[idx2]
-                mutant.assignment[idx2] = temp
+                num = len(topology.taskgraph.subgraph)
+                rd_cnt = rd.randint(1, num)
+                idx_arr = [i for i in range(num)]
+                for _ in range(rd_cnt):
+                    idx = rd.choice(idx_arr)
+                    mutant.assignment[idx] = rd.choice(cluster.nodes)
+                
+                
+                if len(topology.taskgraph.subgraph) != len(mutant.assignment):
+                    continue
+                
+                if not self._check_available_case(cluster, mutant.assignment):
+                    continue
+                
+                    
+                #idx1, idx2 = rd.choices([i for i in range(len(mutant.assignment))], k=2)
+                #temp = mutant.assignment[idx1]
+                #mutant.assignment[idx1] = mutant.assignment[idx2]
+                #mutant.assignment[idx2] = temp
                 
                 if mutant not in population:
                     #score_mutant = Fitness.fitness_weighted_sum(mutant)                                
                     population.append(mutant)
                     #scores.append(score_mutant)
-                    d_scores[len(population) - 1] = Fitness.fitness_weighted_sum(mutant.assignment)                                
+                    d_scores[len(population) - 1] = Objective.objectvie_weighted_sum(mutant.assignment)                                
             time_mutation = time.time() - stime
             total_time_mutation += time_mutation
-                    
+            
+            
             # Sorting
             stime = time.time()
             best = sorted(d_scores.items(), key=lambda item: item[1])[:num_top]
@@ -239,19 +241,38 @@ class GAScheduler(MetaHueristicScheduler):
             
             self._num_generation += 1 
         
-        print(f'Avg fitness time: {total_time_fitness / self._num_iteration}')
-        print(f'Avg crossover time: {total_time_crossover / self._num_iteration}')
-        print(f'Avg mutation time: {total_time_mutation / self._num_iteration}')
-        print(f'Avg sorting time: {total_time_sorting / self._num_iteration}')
+        #print(f'Avg fitness time: {total_time_fitness / self._num_iteration}')
+        #print(f'Avg crossover time: {total_time_crossover / self._num_iteration}')
+        #print(f'Avg mutation time: {total_time_mutation / self._num_iteration}')
+        #print(f'Avg sorting time: {total_time_sorting / self._num_iteration}')
         file.close()
         file2.close()
         
-        return best      
+        return population[best_idx].assignment
     
-    def schedule(self, topology: Topology, cluster: Cluster) -> bool:
-        best = self._meta_algorithm(topology, cluster)
+    def schedule(self, cluster: Cluster, topology: Topology) -> bool:
+        if not self.canSchedule(cluster, topology):
+            return None
+        
+        best = self._meta_algorithm(cluster, topology)
         if best == None:
             return False
         
+        #temp = self._check_available_case(cluster, best)
+        #print(temp)
+        #print(len(topology.taskgraph.subgraph))
+        #print(len(best))
+        ##if self._check_available_case(cluster, best):
+        ##    print('True')
+        #    #print('True')
+        #    #print('True')
+        #    #print('True')
+        #    #print('True')
+        ##print(best)
+        ##print(best)
+        ##print(best)
+        #for t in best:
+        #    print(t.id, end=' ')
+        #print()
         cluster.assign_topology(topology, best)
         return True
