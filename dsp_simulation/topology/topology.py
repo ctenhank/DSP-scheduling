@@ -1,14 +1,11 @@
-from ipaddress import v4_int_to_packed
-from typing import Dict, List, Tuple
 import uuid
+import pandas as pd
 
-from executing import Source
-from dsp_simulation.topology.grouping import AllGrouping, GlobalGrouping, Grouping, ShuffleGrouping
-from dsp_simulation.topology.task import Task
+from typing import Dict, List, Tuple
+from dsp_simulation.simulator.workload import *
 from dsp_simulation.topology.task_graph import TaskGraph
 from dsp_simulation.topology.vertex import OperatorVertex, SinkVertex, SourceVertex, Vertex
 
-import pandas as pd
     
 class Topology:
     """Acyclic graph consisting of logical operators
@@ -19,8 +16,9 @@ class Topology:
 
     CONNECTION = ['shuffle', 'all', 'global']
     PREDEFINED = ['wc']
+    WORKLOAD_DISTRIBUTION = ['binomial', 'normal', 'uniform']
 
-    def __init__(self, name, conf_distribution=None):
+    def __init__(self, name, conf_distribution=None, input_rate_dist:str='binomial'):
         f"""_summary_
 
         Args:
@@ -40,8 +38,19 @@ class Topology:
         self._distribution = pd.read_csv(conf_distribution).to_dict()
         self._taskgraph: TaskGraph = []
         self._graph = { 'root': [] }
-
-
+        self._workload_dist_type = input_rate_dist
+        self._workload_dist = self._update_workload(self._workload_dist_type)
+        
+    def _update_workload(self, dist):
+        ret = []
+        if dist == 'binomial':
+            ret = binomal_distribution()
+        elif dist == 'normal':
+            ret = normal_distribution()
+        elif dist == 'uniform':
+            ret = uniform_distribution()      
+        return ret 
+        
     @property
     def id(self):
         return self._id
@@ -73,6 +82,10 @@ class Topology:
     @property
     def graph(self):
         return self._graph
+    
+    @property
+    def profiler(self):
+        return self._profiler
     
     def __str__(self):
         ret = '=' * 25 + 'Topology Info' + '='* 25 + '\n'
@@ -133,7 +146,8 @@ class Topology:
         if type(source) is not SourceVertex:
             print(f'Error: You should add {source.__class__}, not {source.__class__}')
             exit(1)
-        
+            
+        source.update_rate_distribution(self._workload_dist)
         self._source.append(source)
         
         self._graph['root'].append(source.id)
@@ -210,7 +224,7 @@ class Topology:
         self._edge[edge] = connect_type
         
         
-    def _get_vertex(self, vertex_id: str):
+    def get_vertex(self, vertex_id: str):
         for v in self._source:
             if v.id == vertex_id:
                 return v
@@ -218,8 +232,25 @@ class Topology:
         for v in self._operator:
             if v.id == vertex_id:
                 return v
-        
+            
         return None
+    
+    def get_target(self, vertex_id: str):
+        ret = []
+        for edge in self._edge:
+            u, v = edge[0], edge[1]
+            if u == vertex_id and self.is_operator(v):
+                ret.append(v)
+        return ret
+    
+    def _get_vertex_order(self):
+        ret = []
+        for edge in self._edge:
+            ret.append(edge)
+        return ret
+    
+    def get_vertex_order(self):
+        pass
 
     def instantiate(self, max_num_operators):
         self._taskgraph = TaskGraph(self._id, self._source, self._operator, self._sink, self._edge, max_num_operators)

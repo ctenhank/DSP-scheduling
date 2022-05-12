@@ -1,17 +1,17 @@
-from abc import ABCMeta, abstractmethod
-import pickle
-import time
-from typing import Deque, Dict, List
-import numpy as np
+import sys
 import uuid
+import time
+import pickle
+import datetime
+import numpy as np
+
+from abc import ABCMeta, abstractmethod
+from typing import Deque, Dict, List
+from pathlib import Path
 from collections import deque
 from dsp_simulation.etc.clock import SystemClock
-
 from dsp_simulation.etc.message import Message
-from dsp_simulation.simulator.latency_generator import GaussianLatencyGenerator, LatencyGenerator
-
-from pathlib import Path
-import datetime
+from dsp_simulation.simulator.generator import GaussianGenerator, Generator
 
 tz = datetime.timezone(datetime.timedelta(hours=9))
 now = datetime.datetime.now(tz)
@@ -43,7 +43,7 @@ class Task(metaclass=ABCMeta):
         pass     
     
     @abstractmethod
-    def _post_result(self):
+    def post_result(self):
         pass
     
     @abstractmethod
@@ -64,20 +64,51 @@ class Task(metaclass=ABCMeta):
     
 
 class SourceTask(Task):
-    def __init__(self, vertex_id, drate, name=None, dsize_mean=250, dsize_std=25):
+    def __init__(self, vertex_id, max_data_rate, name=None, dsize_mean=250, dsize_std=25, input_rate_dist=None):
         super().__init__(vertex_id, name)
-        self._data_rate = drate
-        self._time_for_data = 1 / self._data_rate
-        self._data_size_gernerator = GaussianLatencyGenerator(dsize_mean, dsize_std)
+        self._current_sec = int(SystemClock.CURRENT)
+        self._max_data_rate = max_data_rate
+        self._current_data_rate = int(input_rate_dist[self._current_sec] * self._max_data_rate)
+        self._time_for_data = 1 / self._current_data_rate
+        self._data_size_gernerator = GaussianGenerator(dsize_mean, dsize_std)
         self._data_size = []
         self._snd_msg_cnt = 0
-        self.share = 0
+        self._tot_snd_msg_cnt = 0
+        self._last_executed = 0
+        self._input_rate_dist = input_rate_dist
+        self._round_start_time = 0
+        self._current = 0
+        self._previous_share = 0        
+        
+    @property
+    def last_executed(self):
+        return self._last_executed
     
-    def update_datarate(self, drate):
-        self._data_rate = drate
+    @property
+    def current_sec(self):
+        return self._current_sec
     
-    def _post_result(self):
-        pass
+    @last_executed.setter
+    def last_executed(self, current: SystemClock):
+        if current < 0:
+            return
+        
+        self._last_executed = int(current / self._time_for_data)
+    
+    def _update_data_rate(self):
+        self._current_data_rate = int(self._max_data_rate * self._input_rate_dist[self._current_sec])
+        self._time_for_data = 1 / self._current_data_rate
+        
+    
+    def post_result(self):
+        print(f'{self._id} ({int(SystemClock.CURRENT)}): Sent message count({self._snd_msg_cnt}), total sent message #({self._tot_snd_msg_cnt})')
+        self._msg_cnt_2s = 0
+        self._snd_msg_cnt = 0
+        self._current_sec += 1
+        self._last_executed = 0
+        self._round_start_time = SystemClock.CURRENT
+        
+        self._update_data_rate()
     
     def receive(self, source: str, msg: Message):
         pass
@@ -98,27 +129,25 @@ class SourceTask(Task):
         print(f'Writing a log file to {filepath}')
         
     def start(self):
-        current = int(SystemClock.CURRENT / self._time_for_data)
-        #print(current, self.share)
-        if current > self.share:
-            msg = []
-            for _ in range(current - self.share):
-                msg_size = self._data_size_gernerator.next_latency_ms()
-                msg.append(Message(
+        current = int((SystemClock.CURRENT % 1) / self._time_for_data) + 1
+        
+        if current > self._last_executed:
+            msg_size = self._data_size_gernerator.next()
+            self._data_size.append(msg_size)
+            self._snd_msg_cnt += 1
+            self._tot_snd_msg_cnt += 1
+    
+            self._last_executed = current
+
+            return {
+                'msg': Message(
                 event_time=SystemClock.CURRENT,
                 msg_size=msg_size,
                 vertex_id=self.vertex_id
-                ))
-                self._data_size.append(msg_size)
-            
-            self.share = current
-
-            return {
-                'msg': msg
+                )
             }
+        
     
-
-# 더이상 건드릴것없음
 class SinkTask(Task):
     def __init__(self, vertex_id, indegree: List[str], name=None):
         super().__init__(vertex_id, name)
@@ -126,32 +155,22 @@ class SinkTask(Task):
         self._msg_cnt_2s = 0
         self._rcv_msg_cnt = {}
         self._end_to_end_delay: List[float] = []
-        #self._queue:Dict[str, Deque[Message]] = {}
-        self._queue:Deque[Message] = []
+        self._queue: Deque[Message] = deque()
 
         if indegree is not None:
             for indegree_id in indegree:
                 self._rcv_msg_cnt[indegree_id] = 0
                 
-    def _post_result(self):
-        #self._throughput += 1
-        #self._measure_time += self._execute_latency[-1]
-        
-        q, r = divmod(int(SystemClock.CURRENT), 2)
-        if q != self._interval_time and r == 0:
-            self._interval_time = q
-            print(f'{self._id} ({int(SystemClock.CURRENT)}): throughput({self._msg_cnt_2s})')
-            self._msg_cnt_2s = 0
+    def post_result(self):
+        print(f'{self._id} ({int(SystemClock.CURRENT)}): Message count({self._msg_cnt_2s})')
+        self._msg_cnt_2s = 0
             
                       
     def start(self):
-        
-        #stime = time.time()
         while self._queue:
             e = self._queue.pop()
             self._end_to_end_delay.append(e.accumulated_latency)
             self._msg_cnt_2s += 1
-            #print(f'Response Time(ms): {e.accumulated_latency}')
     
         return None
 
@@ -161,6 +180,8 @@ class SinkTask(Task):
         basedir: Path = outdir / self.vertex_id
         basedir.mkdir(exist_ok=True, parents=True)
         filepath = basedir/ (self._id + '.pkl')
+        print(f'sink e2e delay: {np.array(self._end_to_end_delay).mean()} ms')
+        print(f'sink throughput: {self._rcv_msg_cnt}')
         
         obj = {
             'received_message': self._rcv_msg_cnt,
@@ -179,7 +200,7 @@ class SinkTask(Task):
     
 
 class OperatorTask(Task):
-    def __init__(self, vertex_id, selectivity, productivity, indegree: List[str]=None, name=None, cap=None):
+    def __init__(self, vertex_id, selectivity, productivity, indegree: List[str]=None, name=None, cap=None, latency_generator:Generator=None):
         """_summary_
 
         Args:
@@ -189,36 +210,40 @@ class OperatorTask(Task):
             name (_type_, optional): _description_. Defaults to None.
         """
         super().__init__(vertex_id, name)
+        
+        self._speed_up = None
         self._selectivity = selectivity
         self._productivity = productivity
-        self._latency_generator: LatencyGenerator = None
-        self._assigned_cap = cap
-        self._throughput = 0
-        self._throughput_2s = []
+        self._latency_generator = latency_generator
+        
+        
+        self._throughput = []
+        self._throughput_period = 0
         self._processing_latency = []
+        self._processing_latency_period = []
         self._execute_latency = []
+        self._execute_latency_period = []
+        
         self._snd_msg_cnt = 0
-        self._rcv_msg_cnt = {}
-        self._queue:Dict[str, Deque[Message]] = {}
-        self._measure_time = 0.0
-        self._interval_time = 0
-
+        self._rcv_msg_cnt: Dict[str, int] = {}
+        self._queue: Dict[str, Deque[Message]] = {}
+        self._waiting_time:Dict[str, List] = {}
+        self._arrival_time:Dict[str, List] = {}
+        self._arrival_time_period: Dict[str, List] = {}
+        
+        self._executable_time = 0.0
+    
         if indegree is not None:
             for indegree_id in indegree:
                 self._queue[indegree_id] = deque()
                 self._rcv_msg_cnt[indegree_id] = 0
+                self._waiting_time[indegree_id] = []
+                self._arrival_time[indegree_id] = []
+                self._arrival_time_period[indegree_id] = []
                 
     @property
-    def assigned_cap(self):
-        return self._assigned_cap
-    
-    @assigned_cap.setter
-    def assigned_cap(self, cap):
-        if cap < 0:
-            print(f'The capability must be over than 0.0: {cap}')
-            exit(1)
-            
-        self._assigned_cap = cap
+    def speed_up(self):
+        return self._speed_up
         
     @property
     def throughput(self):
@@ -227,19 +252,18 @@ class OperatorTask(Task):
             ret += thr
         return ret
                 
-    def update_latency_generator(self, model: LatencyGenerator=None):
-        self._latency_generator: LatencyGenerator = model
-
+    def update_speed_up(self, speed_up):
+        self._speed_up = speed_up
         
     def shutdown(self):
         global outdir
         basedir: Path = outdir / self.vertex_id
         basedir.mkdir(exist_ok=True, parents=True)
         filepath = basedir/ (self._id + '.pkl')
+    
+        for key in self._waiting_time:
+            print(f'Average waiting time({key}->{self.vertex_id}): {np.array(self._waiting_time[key]).mean()}ms')
         
-        #throughput = [self._throughput_2s[0]]
-        #for idx in range(len(self._throughput_2s[1:])):
-        #    throughput.append(self._throughput_2s[idx] - self._throughput_2s[idx - 1])
         obj = {
             'throughput': self._throughput_2s,
             'execute_latency': self._execute_latency,
@@ -248,7 +272,8 @@ class OperatorTask(Task):
             'selectivity': self._selectivity,
             'capability': self._assigned_cap,
             'received_messasge': self._rcv_msg_cnt,
-            'sent_message': self._snd_msg_cnt
+            'sent_message': self._snd_msg_cnt,
+            'waiting_time': self._waiting_time[key]
         }
         with filepath.open('wb') as f:
             pickle.dump(obj, file=f)
@@ -260,73 +285,122 @@ class OperatorTask(Task):
         Returns:
             _type_: _description_
         """
+        if self._executable_time > SystemClock.CURRENT:
+            return False
+        
         for key in self._queue:
             if len(self._queue[key]) < 1:
                 return False
-            
-            can = self._queue[key][0].event_time + self._queue[key][0].transmission_delay
-            if SystemClock.CURRENT < can:
+            if SystemClock.CURRENT < self._queue[key][0].rcv_time:
                 return False
+
         return True
     
-    def _post_result(self):
-        self._throughput += 1
-        self._measure_time += self._execute_latency[-1]
+    def post_result(self):
+        self._throughput.append(self._throughput_period)
+        #print(f'{self._id} ({int(SystemClock.CURRENT)}): throughput({self._throughput})')
         
-        q, r = divmod(int(SystemClock.CURRENT), 2)
-        if q != self._interval_time and r == 0:
-            self._interval_time = q
-            self._throughput_2s.append(self._throughput)
-            print(f'{self._id} ({int(SystemClock.CURRENT)}): throughput({self._throughput})')
-            self._throughput = 0
+        arv_mean, arv_var = 0, 0
+        keys = []
+        for key in self._queue:
+            keys.append(key)
+            arv_time = np.array(self._arrival_time_period[key])
+            
+            arv_mean += arv_time.mean()
+            arv_var += arv_time.var()
+            
+            self._arrival_time_period[key] = []
+            self._rcv_msg_cnt[key] = 0
+        arv_mean /= len(keys)
+        arv_var /= len(keys)
+        
+        exec_time = np.array(self._execute_latency_period) / 1000
+        self._execute_latency_period = []
+        self._processing_latency_period = []
+        for key in self._queue:
+            self._arrival_time_period[key] = []
+        self._throughput_period = 0
+        
+
+        return {
+            'interarrival_time':{
+                'mean': arv_mean,
+                'var': arv_var
+            },
+            'service_time':{
+                'mean': exec_time.mean(),
+                'var': exec_time.var()
+            }
+        }
     
     def receive(self, source: str, msg: Message):
+        """_summary_
+
+        Args:
+            source (str): vertex id of source task, which send this message
+            msg (Message): _description_
+        """
         if source in self._queue:
+            if self._arrival_time[source]:
+                self._arrival_time_period[source].append(msg.rcv_time - self._arrival_time[source][-1])
+            self._arrival_time[source].append(msg.rcv_time)
+            
             self._queue[source].append(msg)
             self._rcv_msg_cnt[source] += 1
             
-    def _pop_data(self)-> List[Message]:
-        ret = []
+    def _pop_data(self)-> Dict[str, Message]:
+        ret: Dict[str, Message] = {}
+        
         for key in self._queue:
-            ret.append(self._queue[key].popleft())
+            msg = self._queue[key].popleft()
+            ret[key] = msg
+
+        for key in ret:
+            self._waiting_time[key].append((SystemClock.CURRENT - ret[key].rcv_time) * 1000)
+       
         return ret
     
     def _processing(self):
-        # 데이터 사이즈의 변화에 따라 레이턴시 변화도 있어야 하지 않을까? -> 고려하지 않음
-        input:List[Message] = self._pop_data()
-        latency = self._latency_generator.next_latency_ms()
+        input:Dict[str, Message] = self._pop_data()
+        latency = self._latency_generator.next() * (1 / self._speed_up)
         self._processing_latency.append(latency)
+        self._processing_latency_period.append(latency)
         
         size_output= 0
         num_output = len(input) * self._selectivity
         max_delay = -1.0
-        for i in input:
-            size_output += i.msg_size
-            max_delay = max(max_delay, i.accumulated_latency)
+        min_waiting_time = sys.maxsize
+        for key in input:
+            size_output += input[key].msg_size
+            max_delay = max(max_delay, input[key].accumulated_latency)
+            min_waiting_time = min(min_waiting_time, (SystemClock.CURRENT - input[key].rcv_time))
 
         size_output *= self._productivity
         msg = [Message(SystemClock.CURRENT, size_output, self._vertex_id, max_delay) for _ in range(num_output)]
-        return msg
+        return msg, min_waiting_time
         
     def start(self):
         """_summary_
         """
         
+        ret = None
         if self._ready():
+            self._throughput_period += 1
             stime = time.time()
-            res = self._processing() 
-        
-        
+            res, waiting_time = self._processing() 
             execute_latency = self._processing_latency[-1] + (time.time() - stime)
+            
             self._execute_latency.append(execute_latency)
-            self._post_result()
+            self._execute_latency_period.append(execute_latency)
             
             for msg in res:
                 msg.update_accumulated_latency(self._execute_latency[-1])
+            self._executable_time = SystemClock.CURRENT + self._execute_latency[-1] / 1000
             
-            return {
+            ret = {
                 'msg': res,
                 'execute_latency': self._execute_latency[-1],
                 'processing_latency': self._processing_latency[-1]
             }
-        return None
+        
+        return ret

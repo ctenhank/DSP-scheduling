@@ -43,7 +43,7 @@ class ACOScheduler(MetaHueristicScheduler):
         Scheduler (_type_): _description_
     """
 
-    def __init__(self, num_ants: int = 10, alpha: float = 1.0, beta: float = 2.5, rho: float = 0.8, Q: float = 1.0, t0: float = 0.1):
+    def __init__(self, num_ants: int = 1000, alpha: float = 1.0, beta: float = 2.5, rho: float = 0.8, Q: float = 1.0, t0: float = 0.1):
         """_summary_
 
         Args:
@@ -184,26 +184,47 @@ class ACOScheduler(MetaHueristicScheduler):
                         self._tau[j][i] += local_pheromone[(i, j)]
     
     
+    def _get_best(self, cluster: Cluster):
+        best = sys.maxsize
+        ret = []
+        
+        available_nodes = cluster.get_available_physical_node()
+        available_worker_cnt = {}
+        
+        for node in available_nodes: 
+            available_worker_cnt[node.id] = node.available_worker_cnt
+        
+        for ant in self._ants:
+            assignment = []
+            for worker_idx in ant.visited:
+                assignment.append(self._worker_matrix[worker_idx])
+                
+            score = Objective.objectvie_weighted_sum(assignment)
+            if best > score:
+                best = score
+                ret = assignment
+                
+        return ret
+    
     def _get_best(self):
         best = sys.maxsize
         ret = []
+
         for ant in self._ants:
-            nodes = []
+            assignment = []
             for worker_idx in ant.visited:
-                nodes.append(self._worker_matrix[worker_idx])
+                assignment.append(self._worker_matrix[worker_idx])
                 
-            score = Objective.objectvie_weighted_sum(nodes)
+            score = Objective.objectvie_weighted_sum(assignment)
             if best > score:
                 best = score
-                ret = nodes
+                ret = assignment
                 
-        print(len(ret))
         return ret
                 
 
     def _meta_algorithm(self, cluster: Cluster, topology: Topology) -> List[PhysicalNode]:
         self._initialize_environment(cluster, topology)
-        print(len(topology.taskgraph.subgraph))
         while self._num_solution > 1:
             
             # the edges list from a to b
@@ -217,15 +238,15 @@ class ACOScheduler(MetaHueristicScheduler):
         
         return self._get_best()
             
-    def schedule(self, cluster: Cluster, topology: Topology) -> bool:
+    def schedule(self, cluster: Cluster, topology: Topology) -> List[PhysicalNode]:
         if not self.canSchedule(cluster, topology):
-            return False
+            return None
         best = self._meta_algorithm(cluster, topology)
 
         if best == None:
-            return False
+            return None
         
         #print(len(topology.taskgraph.subgraph), len(best))
-
+        return best
         cluster.assign_topology(topology, best)
         return True

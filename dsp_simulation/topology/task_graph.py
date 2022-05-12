@@ -1,16 +1,12 @@
-from ast import Sub
 import random as rd
 from typing import Dict, List, Tuple
 from dsp_simulation.topology.grouping import GlobalGrouping, ShuffleGrouping
 from dsp_simulation.topology.task import OperatorTask, SinkTask, SourceTask, Task
 from dsp_simulation.topology.vertex import OperatorVertex, SinkVertex, SourceVertex, Vertex
-import uuid
 
 class SubTaskGraph:
-    #def __init__(self, task: List[Task], edge: Dict[Tuple[str, str], float]):
     CNT = 0
     def __init__(self, task: List[Task], edge: Dict[Task, Dict]):
-        #self._id = 'subgraph-' + str(uuid.uuid1())
         self._id = 'subgraph-' + str(SubTaskGraph.CNT)
         self._task = task
         self._edge = edge
@@ -109,8 +105,9 @@ class TaskGraph:
         for v in self._source:
             self._task[v.id] = [SourceTask(
                 vertex_id=v.id,
-                drate=v.data_rate,
-                name=v.id + '-0'
+                max_data_rate=v.data_rate,
+                name=v.id + '-0',
+                input_rate_dist=v.input_dist
                 )]
             self._task_edge[self._task[v.id][0]] = {'target': [],
                         'rate': []}
@@ -118,16 +115,20 @@ class TaskGraph:
         for v in self._sink:
             indegree = [v.id for v in v.indegree]
             self._task[v.id] = [SinkTask(v.id, indegree, v.id + '-0')]
-            #self._task_edge[self._task[v.id][0].id] = []
             self._task_edge[self._task[v.id][0]] = {'target': [],
                         'rate': []}
         
         for v in self._operator:
             indegree = [v.id for v in v.indegree]
-            # TODO: productivity, selectivity
-            self._task[v.id] = [OperatorTask(v.id, v.selectivity, v.productivity, indegree, v.id+f'-{i}') for i in range(v.parallelism)]
+            self._task[v.id] = [OperatorTask(
+                vertex_id=v.id,
+                selectivity=v.selectivity,
+                productivity=v.productivity, 
+                indegree=indegree, 
+                name=v.id+f'-{i}',
+                latency_generator=v.latency_generator
+                ) for i in range(v.parallelism)]
             for task in self._task[v.id]:
-                #self._task_edge[task.id] = []
                 self._task_edge[task] = {
                     'target': [],
                         'rate': []
@@ -143,15 +144,7 @@ class TaskGraph:
             elif grp_type == 'global':
                 task_edge = GlobalGrouping(self._task[source.id], self._task[target.id]).connect()
             
-            # 여기서 뭔가 잘못됨
-            #target = []
-            #rate = []
-            #print(task_edge)
-            # task의 edge 정보가 사라지는 경우가 있는데 여기까진 살아있음
-            #print(task_edge)
             for tuple in task_edge:
-                #print(tuple[0][0], tuple[0][1])
-
                 source = tuple[0][0]
                 
                 if source not in self._task_edge:
@@ -166,20 +159,6 @@ class TaskGraph:
                 
                 self._task_edge[source]['target'].append(destination)
                 self._task_edge[source]['rate'].append(tranfer_rate)
-                
-                #print(source, self._task_edge[source])
-                
-                #target.append(destination)
-                #rate.append(tranfer_rate)
-                #self._task_edge[source].append(destination)
-            
-            #self._task_edge[source] = {
-            #    'target': target,
-            #    'rate': rate
-            #}
-            #print()
-            #print()
-            #print()
 
 
     def _pin(self, vertex: List[Vertex]) -> List[List[Task]]:
@@ -201,12 +180,9 @@ class TaskGraph:
         subtask = []
         subtask_edge = {}
         for task in subgraph:
-            #print(task)
-            #print(self._task_edge[task])
             subtask.append(task)
             subtask_edge[task] = self._task_edge[task]
             
-            #subtask_edge[task.id] = self._task_edge[task.id]
         return SubTaskGraph(subtask, subtask_edge)
 
 

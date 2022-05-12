@@ -10,21 +10,28 @@ class Worker:
     """This class is a process to execute and handle a subtopology of a topology in physical machine.
     It can process only one subtopology per worker.
     """
-    def __init__(self, capability):
+    def __init__(self, speed_up, pn_id):
         #self._id = 'worker-' + str(uuid.uuid1())        
         self._id = 'worker-' + str(Worker.CNT)
-        self._cap = capability
+        self._pn_id = pn_id
+        #self._cap = capability
         self.assigned = False
+        self._speed_up = speed_up
+        
         self._graph: SubTaskGraph = None
         Worker.CNT += 1
             
     @property
-    def capability(self):
-        return self._cap
+    def speed_up(self):
+        return self._speed_up
         
     @property
     def id(self):
        return self._id
+   
+    @property
+    def pn_id(self):
+        return self._pn_id
     
     @property
     def graph(self):

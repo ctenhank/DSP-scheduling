@@ -1,6 +1,9 @@
 import random as rd
-from typing import List, Mapping, Tuple
+from re import sub
+from typing import Dict, List, Mapping, Tuple
 from dsp_simulation.cluster.physical_node import PhysicalNode
+from dsp_simulation.cluster.worker import Worker
+from dsp_simulation.topology.task_graph import SubTaskGraph
 #from dsp_simulation.topology.subtopology import SubTopology
 from dsp_simulation.topology.topology import Topology
 
@@ -42,9 +45,9 @@ class Cluster:
 
         self._racks= []
         self._nodes: List[PhysicalNode] = []
-        #    self.__topologies: List[Topology] = []
         self._topology: List[Topology] = []
-        self._assigned: dict = {}
+        self._assigned: Dict = {}
+        self._topology_to_worker: Dict[Topology, Dict[SubTaskGraph, Worker]] = {}
 
         if random:
             self._nodes = self._generate_random_nodes(max_node, max_worker)
@@ -79,6 +82,10 @@ class Cluster:
     @property
     def topology(self):
         return self._topology
+    
+    @property
+    def topology_to_worker(self):
+        return self._topology_to_worker
 
     def _generate_sample_cluster(self, config):
         pass
@@ -99,7 +106,6 @@ class Cluster:
             
         for _ in range(num_rack):
             list_rack.append('rack-' + str(Cluster.RACK_CNT))
-            #list_rack.append('rack-' + str(uuid.uuid1()))
             Cluster.RACK_CNT += 1
         return list_rack
 
@@ -115,8 +121,6 @@ class Cluster:
 
         nodes = []
         while num_node > 0:
-            #rack = rd.choice(self.__racks)
-            #node = PhysicalNode(rack, num_worker)
             node = PhysicalNode(max_worker)
             nodes.append(node)
             num_node -= 1
@@ -137,32 +141,12 @@ class Cluster:
             List[PhysicalNode]: The list of physical node which has available worker
         """
         ret = []
-        #print(f'length of nodes: {len(self.__nodes)}')
         for node in self._nodes:
             worker = node.get_available_worker()
-            #print(f'{node}')
             if len(worker) > 0:
                 ret.append(node)
-
         return ret
 
-    # def submit(self, topology: Topology) -> bool:
-    #     """_summary_
-
-    #     Args:
-    #         job_graph (JobGraph): _description_
-
-    #     Returns:
-    #         bool: _description_
-    #     """
-    #     if not self.get_available_physical_node():
-    #         print(f'ERROR: There is no enough worker to execute {topology}')
-    #         return False
-        
-    #     self._executable_job_graph.append(topology)
-    #     return True       
-
-    
     def check_topology_can_be_allocated(self, topology: Topology):
         """Check whether the given topology can be allocated in this cluster
 
@@ -186,12 +170,32 @@ class Cluster:
         
     def assign_topology(self, topology: Topology, assignment: List[PhysicalNode]):
         self._topology.append(topology)
-        
+        self._topology_to_worker[topology] = {}
         for idx, node in enumerate(assignment):
             target_node = None
             for nd in self.nodes:
                 if nd.id == node.id:
                     target_node = nd
                     break
-            #print(f'{node.id}: {topology.taskgraph.subgraph[idx]}')
-            res = target_node.assign(topology, idx)
+            
+            subgraph = topology.taskgraph.subgraph[idx]
+            allocated_worker = target_node.assign(subgraph=subgraph)
+            if allocated_worker != None:
+                self._topology_to_worker[topology][subgraph] = allocated_worker
+        #print(self._topology_to_worker[topology])
+    
+    def get_physical_node(self, pn_id: str) -> PhysicalNode:
+        for node in self._nodes:
+            if node.id == pn_id:
+                return node
+        return None
+        
+    def get_reschedulable_physical_node(self, topology: Topology):
+        assign_info = self._topology_to_worker[topology]
+        for subgraph in assign_info:
+            worker = assign_info[subgraph]
+            node = self.get_physical_node(worker.pn_id)
+            node.deassign(worker.id)
+        return self.get_available_physical_node()
+        
+        #return self.get_a

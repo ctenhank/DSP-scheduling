@@ -157,4 +157,7 @@ logs
 log
 example
 data
-conf
+conf    
+img
+.vscode
+.metals

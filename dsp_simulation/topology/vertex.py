@@ -1,7 +1,8 @@
 from abc import abstractmethod
-from asyncio import Task
-import uuid
 from typing import List
+from dsp_simulation.simulator.generator import Generator
+
+import uuid
 
 class Vertex:       
     def __init__(self, name=None):
@@ -39,17 +40,26 @@ class SourceVertex(Vertex):
     Args:
         Vertex (_type_): _description_
     """
-    def __init__(self, data_rate=10000, name=None):
+    def __init__(self, max_data_rate=10000, name=None):
         super().__init__(name)
-        self._data_rate = data_rate
+        self._max_data_rate = max_data_rate
         self._data_size = 0
+        self._input_dist = None
     
     @property
     def data_rate(self):
-        return self._data_rate
+        return self._max_data_rate
+    
+    
+    @property
+    def input_dist(self):
+        return self._input_dist
     
     def type(self):
         return SourceVertex.__class__
+    
+    def update_rate_distribution(self, dist):
+        self._input_dist = dist
 
 
 class SinkVertex(Vertex):
@@ -76,18 +86,28 @@ class SinkVertex(Vertex):
 class OperatorVertex(Vertex):
     """If there are over 2 degrees, this OperatorVertex should be blocked up to coming from every its source.
     
-    """        
-    def __init__(self, parallelism=3, selectivity=5, productivity=0.2, name=None):
+    """
+    PATTERN = ['aggregate', 'map', 'filter', 'flatmap']
+    def __init__(self, parallelism=3, selectivity=5, productivity=0.2, name=None, min_parallelism=1, max_parallelism=200, latency_generator:Generator=None):
         super().__init__(name)
         self._parallelism = parallelism
         self._indegree: List[Vertex] = []
         self._selectivity = selectivity
         self._productivity = productivity
+        self._min_parallelism = min_parallelism
+        self._max_parallelism = max_parallelism
+        self._latency_generator = latency_generator
   
-    
     @property
     def parallelism(self):
         return self._parallelism
+    
+    @parallelism.setter
+    def parallelism(self, parallelism):
+        if parallelism < self._min_parallelism and parallelism > self._max_parallelism:
+            print(f'The parallelism of vertex must be over and equal than {self._min_parallelism} and less than {self._max_parallelism}')
+            return
+        self._parallelism = parallelism
         
     @property
     def indegree(self):
@@ -100,6 +120,10 @@ class OperatorVertex(Vertex):
     @property
     def productivity(self):
         return self._productivity
+    
+    @property
+    def latency_generator(self):
+        return self._latency_generator
     
     def type(self):
         return OperatorVertex.__class__

@@ -250,29 +250,12 @@ class GAScheduler(MetaHueristicScheduler):
         
         return population[best_idx].assignment
     
-    def schedule(self, cluster: Cluster, topology: Topology) -> bool:
+    def schedule(self, cluster: Cluster, topology: Topology) -> List[PhysicalNode]:
         if not self.canSchedule(cluster, topology):
             return None
         
         best = self._meta_algorithm(cluster, topology)
         if best == None:
-            return False
+            return None
         
-        #temp = self._check_available_case(cluster, best)
-        #print(temp)
-        #print(len(topology.taskgraph.subgraph))
-        #print(len(best))
-        ##if self._check_available_case(cluster, best):
-        ##    print('True')
-        #    #print('True')
-        #    #print('True')
-        #    #print('True')
-        #    #print('True')
-        ##print(best)
-        ##print(best)
-        ##print(best)
-        #for t in best:
-        #    print(t.id, end=' ')
-        #print()
-        cluster.assign_topology(topology, best)
-        return True
+        return best
