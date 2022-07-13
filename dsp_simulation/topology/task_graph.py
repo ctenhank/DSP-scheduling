@@ -101,22 +101,82 @@ class TaskGraph:
                 ret.append(source.id)
         return ret
 
+    #def _init_task(self):
+    #    for v in self._source:
+    #        self._task[v.id] = [SourceTask(
+    #            vertex_id=v.id,
+    #            max_data_rate=v.data_rate,
+    #            name=v.id + '-0',
+    #            input_rate_dist=v.input_dist,
+    #            out_degree=v.outdegree
+    #            )]
+    #        self._task_edge[self._task[v.id][0]] = {'target': [],
+    #                    'rate': []}
+
+    #    for v in self._sink:
+    #        self._task[v.id] = [SinkTask(v.id, v.id + '-0')]
+    #        self._task_edge[self._task[v.id][0]] = {'target': [],
+    #                    'rate': []}
+        
+    #    for v in self._operator:
+    #        indegree = [v.id for v in v.indegree]
+    #        self._task[v.id] = [OperatorTask(
+    #            vertex_id=v.id,
+    #            selectivity=v.selectivity,
+    #            productivity=v.productivity, 
+    #            indegree=indegree, 
+    #            name=v.id+f'-{i}',
+    #            latency_generator=v.latency_generator,
+    #            out_degree=v.outdegree
+    #            ) for i in range(v.parallelism)]
+    #        for task in self._task[v.id]:
+    #            self._task_edge[task] = {
+    #                'target': [],
+    #                    'rate': []
+    #            }
+        
+    #    for edge in self._edge:
+    #        source = self._get_vertex(edge[0])
+    #        target = self._get_vertex(edge[1])
+    #        grp_type = self._edge[edge]
+            
+    #        if grp_type == 'shuffle':
+    #            task_edge = ShuffleGrouping(self._task[source.id], self._task[target.id]).connect()
+    #        elif grp_type == 'global':
+    #            task_edge = GlobalGrouping(self._task[source.id], self._task[target.id]).connect()
+            
+    #        for tuple in task_edge:
+    #            source = tuple[0][0]
+                
+    #            if source not in self._task_edge:
+    #                self._task_edge[source] = {
+    #                    'target': [],
+    #                    'rate': []
+    #                }
+                
+                
+    #            destination = tuple[0][1]
+    #            tranfer_rate = tuple[1]
+                
+    #            self._task_edge[source]['target'].append(destination)
+    #            self._task_edge[source]['rate'].append(tranfer_rate)
+    
     def _init_task(self):
         for v in self._source:
             self._task[v.id] = [SourceTask(
                 vertex_id=v.id,
                 max_data_rate=v.data_rate,
                 name=v.id + '-0',
-                input_rate_dist=v.input_dist
+                input_rate_dist=v.input_dist,
+                out_degree=v.outdegree
                 )]
-            self._task_edge[self._task[v.id][0]] = {'target': [],
-                        'rate': []}
+            self._task_edge[self._task[v.id][0]] = {'target': {},
+                        'rate': {}}
 
         for v in self._sink:
-            indegree = [v.id for v in v.indegree]
-            self._task[v.id] = [SinkTask(v.id, indegree, v.id + '-0')]
-            self._task_edge[self._task[v.id][0]] = {'target': [],
-                        'rate': []}
+            self._task[v.id] = [SinkTask(v.id, v.id + '-0')]
+            self._task_edge[self._task[v.id][0]] = {'target': {},
+                        'rate': {}}
         
         for v in self._operator:
             indegree = [v.id for v in v.indegree]
@@ -126,12 +186,13 @@ class TaskGraph:
                 productivity=v.productivity, 
                 indegree=indegree, 
                 name=v.id+f'-{i}',
-                latency_generator=v.latency_generator
+                latency_generator=v.latency_generator,
+                out_degree=v.outdegree
                 ) for i in range(v.parallelism)]
             for task in self._task[v.id]:
                 self._task_edge[task] = {
-                    'target': [],
-                        'rate': []
+                    'target': {},
+                        'rate': {}
                 }
         
         for edge in self._edge:
@@ -149,17 +210,23 @@ class TaskGraph:
                 
                 if source not in self._task_edge:
                     self._task_edge[source] = {
-                        'target': [],
-                        'rate': []
+                        'target': {},
+                        'rate': {}
                     }
                 
                 
                 destination = tuple[0][1]
+                #print(f'{destination}: {type(destination)}')
                 tranfer_rate = tuple[1]
                 
-                self._task_edge[source]['target'].append(destination)
-                self._task_edge[source]['rate'].append(tranfer_rate)
-
+                if destination.vertex_id not in self._task_edge[source]['target']:
+                    self._task_edge[source]['target'][destination.vertex_id] = []
+                    self._task_edge[source]['rate'][destination.vertex_id] = []
+                self._task_edge[source]['target'][destination.vertex_id].append(destination)
+                self._task_edge[source]['rate'][destination.vertex_id].append(tranfer_rate)
+                
+                #self._task_edge[source]['target'].append(destination)
+                #self._task_edge[source]['rate'].append(tranfer_rate)
 
     def _pin(self, vertex: List[Vertex]) -> List[List[Task]]:
         ret = []

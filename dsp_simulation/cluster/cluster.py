@@ -1,8 +1,10 @@
+import math
 import random as rd
 from re import sub
 from typing import Dict, List, Mapping, Tuple
 from dsp_simulation.cluster.physical_node import PhysicalNode
 from dsp_simulation.cluster.worker import Worker
+from dsp_simulation.scheduler.objective import Objective, get_network_distance
 from dsp_simulation.topology.task_graph import SubTaskGraph
 #from dsp_simulation.topology.subtopology import SubTopology
 from dsp_simulation.topology.topology import Topology
@@ -58,7 +60,31 @@ class Cluster:
             pass
             
         self._assign_rack_to_nodes()
-                
+        self.initialize_objective()
+    
+    def initialize_objective(self):
+        worker_info = {}
+        workers = []
+        for node in self._nodes:
+            for worker in node.worker:
+                worker_info[worker] = node
+                workers.append(node)
+        
+        Objective.AVAILABILITY_MIN = math.log(97)
+        Objective.RESPONSETIME_MIN = 2 * (1/1.2 + 1/1.2) 
+        Objective.AVAILABILITY_MAX = Objective.availability(workers)
+        Objective.RESPONSETIME_MAX = Objective.topology_network_distance(workers)
+        print(f'Availability: {Objective.AVAILABILITY_MIN}, {Objective.AVAILABILITY_MAX}')
+        print(f'Response Time: {Objective.RESPONSETIME_MIN}, {Objective.RESPONSETIME_MAX}')
+        #response_time = 0
+        #availability = 0
+        #for i in range(len(workers)):
+        #    for j in range(i+1, len(workers)):
+        #        response_time += get_network_distance(workers[i], workers[j])
+        #availability += Objective.availability(workers)
+        #        pass
+        #Objective.AVAILABILITY_MAX = 
+        pass
 
     def __str__(self):
         ret = '=' * 25 + 'Cluster Info' + '='* 25 + '\n'
@@ -118,6 +144,7 @@ class Cluster:
             list[PhysicalNode]: The list of randomly created nodes
         """
         num_node = rd.randint(int(max_node/2), max_node)
+        num_node = max_node
 
         nodes = []
         while num_node > 0:

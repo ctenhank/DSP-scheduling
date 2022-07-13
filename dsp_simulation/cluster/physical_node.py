@@ -28,10 +28,12 @@ class PhysicalNode:
         self._id = 'node-' + str(PhysicalNode.CNT)
         PhysicalNode.CNT += 1
         #self._cap = rd.choice(PhysicalNode.CAPABILITY)
-        self._num_core = rd.randint(4, 8)
+        #self._num_core = rd.randint(4, 8)
+        self._num_core = rd.randint(2, 4)
         #self._remains = self._cap
         self._rack: List[str] = rack
         self._speed_up = float(int(rd.uniform(0.8, 1.3) * 10) / 10)
+        #self._speed_up = 1
         self._worker: List[Worker] = self._get_workers(max_worker)
         self._available_worker: List[bool] = [True for _ in range(len(self._worker))]
         self._available_worker_cnt: int = len(self._worker)
@@ -92,16 +94,6 @@ class PhysicalNode:
         Returns:
             List[Worker]: List of created Workers
         """
-        # Resource에 따라서 reconfigure
-        #internal_max_worker = int(self._cap / PhysicalNode.MINIMAL_REQUIRED_RESOURCES_PER_WORKER)
-        #if max_worker > internal_max_worker:
-        #    max_worker = internal_max_worker
-
-        #num_worker = rd.randint(1, max_worker)
-
-        #worker_resource = self._cap / num_worker
-        #return [Worker(worker_resource) for _ in range(num_worker)]
-        #print(self._speed_up)
         return [Worker(self.speed_up, self._id) for _ in range(self._num_core)]
 
     def get_available_worker(self) -> List[Worker]:

@@ -1,5 +1,4 @@
 import uuid
-import pandas as pd
 
 from typing import Dict, List, Tuple
 from dsp_simulation.simulator.workload import *
@@ -16,9 +15,9 @@ class Topology:
 
     CONNECTION = ['shuffle', 'all', 'global']
     PREDEFINED = ['wc']
-    WORKLOAD_DISTRIBUTION = ['binomial', 'normal', 'uniform']
+    WORKLOAD_DISTRIBUTION = ['binomial', 'normal', 'uniform', 'constant']
 
-    def __init__(self, name, conf_distribution=None, input_rate_dist:str='binomial'):
+    def __init__(self, name, input_rate_dist:str='twostep', step=900):
         f"""_summary_
 
         Args:
@@ -35,20 +34,29 @@ class Topology:
         self._sink: List[SinkVertex] = []
         self._operator: List[OperatorVertex] = []
         self._edge: Dict[Tuple[str, str], str] = {}
-        self._distribution = pd.read_csv(conf_distribution).to_dict()
         self._taskgraph: TaskGraph = []
         self._graph = { 'root': [] }
         self._workload_dist_type = input_rate_dist
-        self._workload_dist = self._update_workload(self._workload_dist_type)
+        self._workload_dist = self._update_workload(self._workload_dist_type, step)
+        self.order = None
         
-    def _update_workload(self, dist):
+    def _update_workload(self, dist, step):
         ret = []
         if dist == 'binomial':
-            ret = binomal_distribution()
+            ret = binomal_distribution(step)
         elif dist == 'normal':
-            ret = normal_distribution()
+            ret = normal_distribution(step)
         elif dist == 'uniform':
-            ret = uniform_distribution()      
+            ret = uniform_distribution(step)      
+        elif dist == 'constant':
+            ret = [1 for _ in range(step+1)]
+        elif dist == 'twostep':
+            for i in range(step+1):
+                if (i < step / 2):
+                    ret.append(0.2)
+                else:
+                    ret.append(1)
+                
         return ret 
         
     @property
@@ -70,10 +78,6 @@ class Topology:
     @property
     def edge(self):
         return self._edge
-
-    @property
-    def distribution(self):
-        return self._distribution
 
     @property
     def taskgraph(self):

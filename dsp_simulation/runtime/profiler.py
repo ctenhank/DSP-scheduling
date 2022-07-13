@@ -1,8 +1,5 @@
 from math import sqrt
-import queue
-from typing import Dict, List, Tuple
-import numpy as np
-import random as rd
+from typing import Dict, List
 
 from dsp_simulation.topology.topology import Topology
 from dsp_simulation.cluster.cluster import Cluster
@@ -13,9 +10,11 @@ class Profiler:
         self._topology = topology
         
         self._first_update = True
+        
         self.task_srvtime: Dict = {}
         self.task_arvtime: Dict = {}
         self.task_linktime: Dict = {}
+        
         # S_{jv}, Var(S_{jv})
         self.vertex_mean_srvtime: Dict[str, List[float]] = {}
         self.vertex_var_srvtime: Dict[str, List[float]] = {}
@@ -26,7 +25,8 @@ class Profiler:
         # W^{K}_{jv}
         self.vertex_kingman: Dict[str, List[float]] = {}
         
-        self._max_threshold_utilization = 0.8
+        # Thresholds related to the bottleneck
+        self._max_threshold_utilization = 1.0
         self._min_threshold_utilization = 0.5
         self._bottleneck_threshold = 1.0
 
@@ -72,9 +72,12 @@ class Profiler:
         return 1 / self.vertex_mean_srvtime[vertex_id][-1]
     
     def _utilization(self, vertex_id, arrival_rate=None):
+        
+        
         if arrival_rate != None:
+            #print(f'{vertex_id}: {arrival_rate}, {self.vertex_mean_srvtime[vertex_id][-1]}')
             return arrival_rate * self.vertex_mean_srvtime[vertex_id][-1]
-
+        #print(f'{self._arrival_rate(vertex_id)}: {arrival_rate}, {self.vertex_mean_srvtime[vertex_id][-1]}')
         return self._arrival_rate(vertex_id) * self.vertex_mean_srvtime[vertex_id][-1]
     
     def _kingman(self, vertex_id):
@@ -84,11 +87,16 @@ class Profiler:
         return len(self.vertex_to_task[vertex_id])
     
     def _estimate_parallelism(self, vertex_id, arrival_rate=None, min=1, max=200):
+        # 현재 arrival rate와 
         for par in range(min, max):
             util = self._utilization(vertex_id, arrival_rate) * (self._current_parallelism(vertex_id) / par)
+            #print(f'{vertex_id}: {par}, {util}')
             if util <= self._max_threshold_utilization and util >= self._min_threshold_utilization:
+                
                 return par
+                #return int(par * 1.5)
         return min
+    
     
     def _has_bottleneck(self, topology: Topology):
         ret = []
@@ -105,7 +113,7 @@ class Profiler:
                 d1[key] = max(d1[key], d2[key])
         return d1
     
-    def _resolve_bottleneck(self, vertex_id: str, output_rate=None):
+    def _resolve_bottleneck(self, vertex_id: str, output_rate=None, first=True):
         """resolve bottleneck by increasing the parallelism of given vertex and propagate its effect to the connected vertices based on the output rate
 
         Args:
@@ -116,16 +124,25 @@ class Profiler:
         if output_rate == None:
             output_rate = self._arrival_rate(vertex_id=vertex_id) * self._topology.get_vertex(vertex_id).selectivity
             
-        estimated = self._estimate_parallelism(vertex_id, output_rate)
-        ret[vertex_id] = estimated
+        if first:
+            estimated = self._estimate_parallelism(vertex_id)
+        else:
+            estimated = self._estimate_parallelism(vertex_id, output_rate)
+
+        if first:
+            ret[vertex_id] = int(estimated * 1.5)
+            first = False
+        else:
+            ret[vertex_id] = estimated
 
         target = self._topology.get_target(vertex_id)
         for v in target:
-            res = self._resolve_bottleneck(v, output_rate * self._topology.get_vertex(v).selectivity)
+            res = self._resolve_bottleneck(v, output_rate * self._topology.get_vertex(v).selectivity, first)
             ret = self._merge_dictionary_by_max(ret, res)
-            
+
         return ret
-            
+    
+
     def periodical_update(self):
         if self._first_update:                
             self.vertex_to_task: Dict = {}
@@ -180,6 +197,7 @@ class Profiler:
             #print(f'{vertex_id} avg queue waiting time(ms): {self.vertex_kingman[vertex_id][-1] * 1000}')
             #print(f'{vertex_id} utilization: {self._utilization(vertex_id)}')
             if self._utilization(vertex_id) >= self._bottleneck_threshold:
+                #print(self._utilization(vertex_id))
                 overutilization += 1
                 
         if overutilization >= 1:
@@ -202,6 +220,8 @@ class Profiler:
             self.task_linktime: Dict = {}
             
             for operator in topology.operator:
+                print(f'operator {operator.id}: {operator.parallelism} -> {res[operator.id]}')
                 operator.parallelism = res[operator.id]
+                
         
         return topology

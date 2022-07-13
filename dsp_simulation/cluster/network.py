@@ -28,7 +28,30 @@ class Network:
     RACK_STD = NODE_STD * 2
     DCN_STD = 0.10867026
     
-    TYPE = ['INTER-THREADS', 'INTER-PROCESS', 'INTER-NODE', 'INTER-RACK']
+    #THREAD_MEAN = 0.004380266651921919 * 10 * 2
+    #PROCESS_MEAN = 0.019515183 * 10 * 5
+    #NODE_MEAN = 0.17600326 * 10 * 2 
+    #RACK_MEAN = NODE_MEAN * 2 * 3 * 2
+    #DCN_MEAN = 5.7412367 
+    #THREAD_STD = 0.0006388322379872011 * 10
+    #PROCESS_STD = 0.004303672 * 10
+    #NODE_STD = 0.05225135 * 10
+    #RACK_STD = NODE_STD * 2
+    #DCN_STD = 0.10867026
+    
+    
+    #THREAD_MEAN = 0.004380266651921919 * 100
+    #PROCESS_MEAN = 0.019515183 * 100
+    #NODE_MEAN = 0.17600326 * 20
+    #RACK_MEAN = NODE_MEAN * 10
+    #DCN_MEAN = 5.7412367 * 2
+    #THREAD_STD = 0.0006388322379872011 * 100
+    #PROCESS_STD = 0.004303672 * 100
+    #NODE_STD = 0.05225135 * 50
+    #RACK_STD = NODE_STD * 2
+    #DCN_STD = 0.10867026 % 2
+    
+    TYPE = ['INTER-THREADS', 'INTER-PROCESS', 'INTER-NODE', 'INTER-RACK', 'INTER-DNC']
     DISTRIBUTION = {
         'INTER-THREADS' : GaussianGenerator(THREAD_MEAN, THREAD_STD),
         'INTER-PROCESS' : GaussianGenerator(PROCESS_MEAN, PROCESS_STD),
@@ -59,10 +82,27 @@ class Network:
                 past.append(key)
         for key in past:
             del self._queue[key]
+            
+    def fake_complete(self, fake):
+        past = []
+        for key in self._queue:
+            if key <= fake:
+                #print(f'{key}: {self._queue[key]}')
+                while self._queue[key]:
+                    pkt = self._queue[key].pop()
+                    self._cnt += 1
+                #for pkt in self._queue[key]:
+                    pkt.dest.receive(pkt.src.vertex_id, pkt.msg)        
+                past.append(key)
+        for key in past:
+            del self._queue[key]
     
     def send(cls, source: Task, target: Task, rcv_time: float):     
         pass
    
     def check_communication_type(self, source: Task, target: Task):
         pass
+    
+    def initialize(self):
+        self._queue: Dict[float, Deque[Packet]] = {}
         

@@ -16,7 +16,7 @@ class RoundRobinScheduler(Scheduler):
         len_nodes = len(available_nodes)
         len_subgraph = len(topology.taskgraph.subgraph)
         #available_nodes[0].ava
-        #available_nodes.sort(key=lambda n: n.worker[0].capability)
+        available_nodes.sort(key=lambda n: n.worker[0].speed_up)
         
         if not cluster.check_topology_can_be_allocated(topology):
             return None

@@ -4,9 +4,10 @@ from typing import List
 from dsp_simulation.cluster.cluster import Cluster
 from dsp_simulation.cluster.physical_node import PhysicalNode
 from dsp_simulation.cluster.worker import Worker
-from dsp_simulation.scheduler.objective import Objective
 from dsp_simulation.topology.topology import Topology
-import sys
+import numpy as np
+from datetime import datetime
+import time
 
 class Scheduler(metaclass=ABCMeta):    
     def __init__(self, id):
@@ -15,6 +16,9 @@ class Scheduler(metaclass=ABCMeta):
     @property
     def id(self):
         return self._id
+    
+    def _z_score(self, fitness_arr, idx):
+        return abs(fitness_arr[idx] - np.mean(fitness_arr)) / np.std(fitness_arr)
     
     def available_workers(self, cluster: Cluster, topology: Topology) -> List[Worker]:
         """Get every available worker
@@ -49,32 +53,33 @@ class Scheduler(metaclass=ABCMeta):
 
     def reschedule(self, cluster: Cluster, topology: Topology) -> bool:
         new_cluster = deepcopy(cluster)
-        assign_info = None
-        for topo in new_cluster.topology_to_worker:
-            if topo.id == topology.id:
-                assign_info = new_cluster.topology_to_worker[topo]
-        
-        for subgraph in assign_info:
-            worker = assign_info[subgraph]
-            node = new_cluster.get_physical_node(worker.pn_id)
-            if node != None:
-                node.deassign(worker.id)      
-                        
-        topology.instantiate(3)
-        
-        assignment = self.schedule(new_cluster, topology)
-        
-        assign_info = cluster.topology_to_worker[topology]
-        for subgraph in assign_info:
-            worker = assign_info[subgraph]
-            node = cluster.get_physical_node(worker.pn_id)
-            if node != None:
+        #print(cluster.get)
+        cnt = 0
+        for node in cluster.get_available_physical_node():
+            for worker in node.get_available_worker():
+                cnt += 1
+        cnt2 = 0
+        for node in new_cluster.get_available_physical_node():
+            for worker in node.get_available_worker():
+                cnt2 += 1
+                
+        for node in new_cluster.nodes:
+            for worker in node.worker:
                 node.deassign(worker.id)
-        
-        cluster.topology.remove(topology)
-        cluster.assign_topology(topology, assignment)
-        
-        return Objective.objectvie_weighted_sum(assignment)
+                if worker.assigned == True:
+                    print(f'{worker.id}: {worker.assigned}')
+        cnt3 = 0
+        for node in new_cluster.get_available_physical_node():
+            for worker in node.get_available_worker():
+                cnt3 += 1
+                
+        topology.instantiate(3)
+        stime = datetime.now()
+        stime2 = time.time_ns()
+        assignment = self.schedule(new_cluster, topology)
+        etime2 = time.time_ns()
+        etime = datetime.now()
+        return new_cluster, assignment, (etime - stime), (etime2 - stime2)
 
     
     def canSchedule(self, cluster: Cluster, topology: Topology) -> bool:

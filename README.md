@@ -18,3 +18,7 @@ python3 -m venv ./venv
 ```bash
 ./venv/bin/python3 app.py [Options]
 ```
+
+TODO:
+Line 구분
+선 4~5개
